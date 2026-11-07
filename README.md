@@ -1,5 +1,7 @@
 # Tabuada
 
+## 👉 [Clique aqui para abrir o app](https://edumuccia.github.io/Tabuada/)
+
 Teste de tabuada para crianças: 10 contas de multiplicação aleatórias (1 a 10), com som de comemoração quando acerta e som negativo quando erra.
 
 No final mostra a nota:
