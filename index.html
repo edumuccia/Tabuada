@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teste de Tabuada</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: "Comic Sans MS", "Trebuchet MS", Arial, sans-serif;
+    background: linear-gradient(160deg, #ffe680, #ffb3c6 60%, #a0e7ff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    color: #333;
+  }
+  .card {
+    background: #fff;
+    border-radius: 28px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.15);
+    width: 100%;
+    max-width: 440px;
+    padding: 28px 22px;
+    text-align: center;
+  }
+  h1 { margin: 0 0 8px; font-size: 2rem; color: #ff6b6b; }
+  p { font-size: 1.15rem; }
+  .progresso { font-size: 1.1rem; color: #777; margin-bottom: 6px; }
+  .barra { height: 14px; background: #eee; border-radius: 10px; overflow: hidden; margin-bottom: 18px; }
+  .barra div { height: 100%; width: 0; background: #4ecdc4; transition: width .3s; }
+  .pergunta { font-size: 3.2rem; font-weight: bold; margin: 10px 0 16px; color: #3a86ff; }
+  input {
+    font-size: 2.4rem;
+    width: 160px;
+    text-align: center;
+    padding: 8px;
+    border: 4px solid #3a86ff;
+    border-radius: 18px;
+    outline: none;
+    font-family: inherit;
+  }
+  .teclado {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin: 18px auto 0;
+    max-width: 300px;
+  }
+  button {
+    font-family: inherit;
+    font-size: 1.6rem;
+    border: none;
+    border-radius: 16px;
+    padding: 14px 0;
+    cursor: pointer;
+    background: #f1f3ff;
+    color: #333;
+    box-shadow: 0 4px 0 #c9cdf0;
+  }
+  button:active { transform: translateY(3px); box-shadow: 0 1px 0 #c9cdf0; }
+  .verde { background: #6bcb77; color: #fff; box-shadow: 0 4px 0 #4a9d55; }
+  .vermelho { background: #ff8787; color: #fff; box-shadow: 0 4px 0 #d45f5f; }
+  .grande { font-size: 1.6rem; padding: 14px 34px; margin-top: 16px; }
+  .feedback { font-size: 1.6rem; font-weight: bold; min-height: 2.2em; margin-top: 14px; }
+  .certo { color: #2b9348; }
+  .errado { color: #d00000; }
+  .nota { font-size: 4rem; font-weight: bold; margin: 10px 0; }
+  .emoji { font-size: 4rem; }
+  .oculto { display: none; }
+  ul.revisao { list-style: none; padding: 0; text-align: left; max-height: 220px; overflow-y: auto; font-size: 1.05rem; }
+  ul.revisao li { padding: 6px 10px; border-radius: 10px; margin-bottom: 4px; }
+  ul.revisao li.ok { background: #e6f9ea; }
+  ul.revisao li.nok { background: #ffe8e8; }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <!-- Tela inicial -->
+  <div id="telaInicio">
+    <div class="emoji">🧮</div>
+    <h1>Teste de Tabuada</h1>
+    <p>Responda 10 contas de multiplicação. Vamos lá?</p>
+    <button class="verde grande" id="btnComecar">Começar</button>
+  </div>
+
+  <!-- Tela do jogo -->
+  <div id="telaJogo" class="oculto">
+    <div class="progresso" id="progresso">Pergunta 1 de 10</div>
+    <div class="barra"><div id="barra"></div></div>
+    <div class="pergunta" id="pergunta">? x ?</div>
+    <input id="resposta" type="text" inputmode="numeric" maxlength="3" autocomplete="off" readonly>
+    <div class="teclado" id="teclado"></div>
+    <div class="feedback" id="feedback"></div>
+  </div>
+
+  <!-- Tela de resultado -->
+  <div id="telaResultado" class="oculto">
+    <div class="emoji" id="resEmoji"></div>
+    <h1>Resultado</h1>
+    <div class="nota" id="resNota"></div>
+    <p id="resMensagem"></p>
+    <ul class="revisao" id="revisao"></ul>
+    <button class="verde grande" id="btnDeNovo">Jogar de novo</button>
+  </div>
+
+</div>
+
+<script>
+  const TOTAL = 10;
+  let perguntas = [];
+  let atual = 0;
+  let acertos = 0;
+  let travado = false;
+  let audioCtx = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- Sons (gerados no navegador, sem arquivos externos) ----------
+  function ctx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+
+  function nota(freq, inicio, duracao, tipo = "sine", volume = 0.25) {
+    const c = ctx();
+    const osc = c.createOscillator();
+    const ganho = c.createGain();
+    osc.type = tipo;
+    osc.frequency.value = freq;
+    const t = c.currentTime + inicio;
+    ganho.gain.setValueAtTime(0.0001, t);
+    ganho.gain.exponentialRampToValueAtTime(volume, t + 0.02);
+    ganho.gain.exponentialRampToValueAtTime(0.0001, t + duracao);
+    osc.connect(ganho).connect(c.destination);
+    osc.start(t);
+    osc.stop(t + duracao + 0.05);
+  }
+
+  function somAcerto() {
+    // Arpejo alegre subindo
+    [523, 659, 784, 1047].forEach((f, i) => nota(f, i * 0.1, 0.25, "triangle"));
+    nota(1319, 0.42, 0.4, "triangle", 0.2);
+  }
+
+  function somErro() {
+    // "Uóóó" descendo
+    nota(330, 0, 0.3, "sawtooth", 0.15);
+    nota(262, 0.28, 0.5, "sawtooth", 0.15);
+  }
+
+  function somFinal(bom) {
+    if (bom) {
+      [523, 659, 784, 1047, 784, 1047].forEach((f, i) => nota(f, i * 0.13, 0.3, "triangle"));
+    } else {
+      [392, 440, 392].forEach((f, i) => nota(f, i * 0.2, 0.3, "triangle", 0.2));
+    }
+  }
+
+  // ---------- Lógica do jogo ----------
+  function sortear(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function gerarPerguntas() {
+    const lista = [];
+    const usadas = new Set();
+    while (lista.length < TOTAL) {
+      const a = sortear(1, 10);
+      const b = sortear(1, 10);
+      const chave = a + "x" + b;
+      if (usadas.has(chave)) continue;
+      usadas.add(chave);
+      lista.push({ a, b, resposta: null });
+    }
+    return lista;
+  }
+
+  function mostrarTela(id) {
+    ["telaInicio", "telaJogo", "telaResultado"].forEach((t) => $(t).classList.add("oculto"));
+    $(id).classList.remove("oculto");
+  }
+
+  function comecar() {
+    ctx();
+    perguntas = gerarPerguntas();
+    atual = 0;
+    acertos = 0;
+    mostrarTela("telaJogo");
+    mostrarPergunta();
+  }
+
+  function mostrarPergunta() {
+    const p = perguntas[atual];
+    $("progresso").textContent = `Pergunta ${atual + 1} de ${TOTAL}`;
+    $("barra").style.width = (atual / TOTAL) * 100 + "%";
+    $("pergunta").textContent = `${p.a} x ${p.b}`;
+    $("resposta").value = "";
+    $("feedback").textContent = "";
+    $("feedback").className = "feedback";
+    travado = false;
+  }
+
+  function digitar(valor) {
+    if (travado) return;
+    const campo = $("resposta");
+    if (valor === "apagar") campo.value = campo.value.slice(0, -1);
+    else if (valor === "ok") responder();
+    else if (campo.value.length < 3) campo.value += valor;
+  }
+
+  function responder() {
+    if (travado) return;
+    const campo = $("resposta");
+    if (campo.value === "") return;
+    travado = true;
+    const p = perguntas[atual];
+    p.resposta = parseInt(campo.value, 10);
+    const correta = p.a * p.b;
+    const fb = $("feedback");
+    if (p.resposta === correta) {
+      acertos++;
+      fb.textContent = "🎉 Muito bem! Acertou!";
+      fb.className = "feedback certo";
+      somAcerto();
+    } else {
+      fb.textContent = `😕 Ops! ${p.a} x ${p.b} = ${correta}`;
+      fb.className = "feedback errado";
+      somErro();
+    }
+    setTimeout(() => {
+      atual++;
+      if (atual < TOTAL) mostrarPergunta();
+      else mostrarResultado();
+    }, p.resposta === correta ? 1300 : 2200);
+  }
+
+  function mostrarResultado() {
+    $("barra").style.width = "100%";
+    $("resNota").textContent = `${acertos} / ${TOTAL}`;
+    let emoji, msg;
+    if (acertos >= 9) {
+      emoji = "🏆";
+      msg = "Parabéns! Você foi incrível!";
+    } else if (acertos >= 7) {
+      emoji = "👍";
+      msg = "Muito bom! Mas precisa melhorar um pouco mais.";
+    } else {
+      emoji = "📚";
+      msg = "Você precisa praticar mais. Não desista, você consegue!";
+    }
+    $("resEmoji").textContent = emoji;
+    $("resMensagem").textContent = msg;
+
+    const ul = $("revisao");
+    ul.innerHTML = "";
+    perguntas.forEach((p) => {
+      const correta = p.a * p.b;
+      const li = document.createElement("li");
+      const ok = p.resposta === correta;
+      li.className = ok ? "ok" : "nok";
+      li.textContent = ok
+        ? `✅ ${p.a} x ${p.b} = ${correta}`
+        : `❌ ${p.a} x ${p.b} = ${correta} (você respondeu ${p.resposta})`;
+      ul.appendChild(li);
+    });
+
+    mostrarTela("telaResultado");
+    somFinal(acertos >= 7);
+  }
+
+  // ---------- Teclado na tela ----------
+  const teclas = ["1","2","3","4","5","6","7","8","9","apagar","0","ok"];
+  teclas.forEach((t) => {
+    const b = document.createElement("button");
+    if (t === "apagar") { b.textContent = "⌫"; b.className = "vermelho"; }
+    else if (t === "ok") { b.textContent = "OK"; b.className = "verde"; }
+    else b.textContent = t;
+    b.addEventListener("click", () => digitar(t));
+    $("teclado").appendChild(b);
+  });
+
+  // Teclado físico (computador)
+  document.addEventListener("keydown", (e) => {
+    if ($("telaJogo").classList.contains("oculto")) return;
+    if (/^[0-9]$/.test(e.key)) digitar(e.key);
+    else if (e.key === "Backspace") digitar("apagar");
+    else if (e.key === "Enter") digitar("ok");
+  });
+
+  $("btnComecar").addEventListener("click", comecar);
+  $("btnDeNovo").addEventListener("click", comecar);
+</script>
+</body>
+</html>
